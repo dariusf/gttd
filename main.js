@@ -113,6 +113,68 @@ function render() {
     text('clear done')
     elementClose('a');
     elementClose('div');
+
+    elementOpen('div');
+    elementVoid('input', null, ['placeholder', 'dropbox token', 'onkeypress', e => {
+      if (e.keyCode === 13) {
+        var text = e.target.value;
+        // https://www.dropbox.com/developers/apps
+        // https://blogs.dropbox.com/developers/2014/05/generate-an-access-token-for-your-own-account/
+        window.localStorage.gttdDropboxToken = text;
+        update();
+      }
+    }], 'value', window.localStorage.gttdDropboxToken || '');
+    elementClose('div');
+    elementOpen('div');
+    elementOpen('a', null, ['href', '#', 'onclick', e => {
+
+      var token = window.localStorage.gttdDropboxToken;
+      if (!token) {
+        return;
+      }
+
+      new Dropbox.Dropbox({ accessToken: token, fetch: fetch })
+        .filesUpload({contents: database.export().buffer, path: '/todo.db', mode: {'.tag': 'overwrite'}})
+        .then(function() {
+          console.log('saved');
+        })
+        .catch(function (error) {
+          console.log(error);
+        });
+
+    }]);
+    text('save')
+    elementClose('a');
+    elementClose('div');
+    elementOpen('div');
+    elementOpen('a', null, ['href', '#', 'onclick', e => {
+
+      var token = window.localStorage.gttdDropboxToken;
+      if (!token) {
+        return;
+      }
+
+      new Dropbox.Dropbox({ accessToken: token, fetch: fetch })
+        .filesDownload({path: '/todo.db'})
+        .then(function (response) {
+          var blob = response.fileBlob;
+          var reader = new FileReader();
+          reader.addEventListener("loadend", function(e) {
+            var ab = e.target.result;
+            var u8a  = new Uint8Array(ab);
+            window.database = new sql.Database(u8a);
+            update();
+          });
+          reader.readAsArrayBuffer(blob);
+        })
+        .catch(function (error) {
+          console.log(error);
+        });
+
+    }]);
+    text('load')
+    elementClose('a');
+    elementClose('div');
   }
 
   elementOpen('ul');
