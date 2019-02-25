@@ -65,6 +65,18 @@ function results(r) {
   }
 }
 
+function query(query, values) {
+  var stmt = window.database.prepare(query);
+  stmt.bind(values);
+  var result = [];
+  var r;
+  while (r = stmt.step()) {
+    result.push(stmt.get())
+  }
+  stmt.free();
+  return [{values: result}];
+}
+
 var { patch, elementVoid, elementClose, elementOpen, text } = IncrementalDOM;
 
 var database = todo();
@@ -96,12 +108,10 @@ function render() {
     if (e.keyCode === 13) {
       var text = e.target.value;
       // the null uses the existing sequence, however the create event loses its id
-      database.exec(`
-        begin;
-        update tasks set ordinal = ordinal + 1 where project_id = ${window.state.chosenProject.id};
-        insert into tasks values (null, 0, '${text}', '${window.state.chosenProject.id}', 0);
-        commit;
-      `);
+      query('update tasks set ordinal = ordinal + 1 where project_id = ?;',
+        [window.state.chosenProject.id]);
+      query('insert into tasks values (null, 0, ?, ?, 0);',
+        [text, window.state.chosenProject.id]);
       e.target.value = '';
       window.state.dirty = true;
       update();
@@ -162,7 +172,8 @@ function render() {
 
     elementOpen('div');
     elementOpen('a', null, ['href', '#', 'onclick', _ => {
-      window.database.run(`delete from tasks where id in (select t.id from tasks t inner join projects p on p.id = t.project_id where t.done and p.id = '${window.state.chosenProject.id}');`);
+      query('delete from tasks where id in (select t.id from tasks t inner join projects p on p.id = t.project_id where t.done and p.id = ?);',
+        [window.state.chosenProject.id]);
       window.state.dirty = true;
       update();
     }]);
@@ -238,18 +249,18 @@ function render() {
 
   elementOpen('ul');
 
-  var tasks = database.exec(`
+  var tasks = query(`
     select t.*
     from tasks t
-    where t.project_id = '${window.state.chosenProject.id}'
-    order by t.done, t.ordinal;`);
+    where t.project_id = ?
+    order by t.done, t.ordinal;`, [window.state.chosenProject.id]);
 
   // assume that dependencies don't span projects
-  var deps = database.exec(`
+  var deps = query(`
     select distinct td.*
     from task_deps td, tasks t
-    where t.project_id = '${window.state.chosenProject.id}'
-    and td.t_from = t.id or td.t_to = t.id;`);
+    where t.project_id = ?
+    and td.t_from = t.id or td.t_to = t.id;`, [window.state.chosenProject.id]);
 
   tasks = results(tasks);
   deps = results(deps);
@@ -276,7 +287,7 @@ function render() {
     elementOpen('li');
 
     function on_change(id, checked) {
-      window.database.run(`update tasks set done = ${+checked} where id = ${id}`);
+      query(`update tasks set done = ? where id = ?`, [+checked, id]);
       window.state.dirty = true;
       update();
     }
@@ -292,7 +303,7 @@ function render() {
 
       var tagsField = document.createElement('input');
       tagsField.setAttribute("placeholder", "tags");
-      var tags = database.exec(`select name from tags where task_id = ${id}`);
+      var tags = query('select name from tags where task_id = ?', [id]);
       if (tags.length) {
         tagsField.value = tags[0].values.join(',');
       }
@@ -300,10 +311,8 @@ function render() {
         if (e.keyCode === 13) {
           var text = e.target.value;
           text.split(',').forEach(t => {
-            window.database.exec(`
-              delete from tags where task_id = ${id};
-              insert into tags values (${id}, '${t.trim()}')
-            `);
+              query('delete from tags where task_id = ?', [id]);
+              query('insert into tags values (?, ?)', [id, t.trim()]);
           });
           window.state.dirty = true;
           update();
@@ -327,7 +336,8 @@ function render() {
       byThis.innerHTML = 'this';
       byThis.onclick = e => {
         if (window.state.blockee !== null && window.state.blockee !== id) {
-          window.database.exec(`insert into task_deps values (${window.state.blockee}, ${id})`);
+          query('insert into task_deps values (?, ?)',
+            [window.state.blockee, id]);
           window.state.blockee = null;
           window.state.dirty = true;
           update();
@@ -340,12 +350,8 @@ function render() {
       toTop.setAttribute('href', '#');
       toTop.innerHTML = 'top';
       toTop.onclick = e => {
-        window.database.exec(`
-          begin;
-          update tasks set ordinal = ordinal + 1 where project_id = ${window.state.chosenProject.id} and id <> ${id};
-          update tasks set ordinal = 0 where id = ${id};
-          commit;
-        `);
+        query('update tasks set ordinal = ordinal + 1 where project_id = ? and id <> ?;', [window.state.chosenProject.id, id]);
+        query('update tasks set ordinal = 0 where id = ?;', [id]);
         window.state.dirty = true;
         update();
       };
@@ -356,7 +362,8 @@ function render() {
       toBottom.setAttribute('href', '#');
       toBottom.innerHTML = 'bottom';
       toBottom.onclick = e => {
-        window.database.exec(`update tasks set ordinal = 1+(select max(ordinal) from tasks where project_id = ${window.state.chosenProject.id}) where id = ${id};`);
+        query('update tasks set ordinal = 1+(select max(ordinal) from tasks where project_id = ?) where id = ?;',
+          [window.state.chosenProject.id, id]);
         window.state.dirty = true;
         update();
       };
