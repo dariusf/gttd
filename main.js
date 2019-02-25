@@ -15,23 +15,6 @@ function todo() {
     foreign key (task_id) references tasks(id));
   `);
 
-  // demo of trigger calling js
-  function update(which, id) {
-    console.log(`${which}d task ${id}`);
-  }
-
-  db.create_function("js_update", update);
-
-  db.run(`
-    create trigger task_update update on tasks
-    begin
-      select js_update('update', new.id);
-    end;
-    create trigger task_insert insert on tasks
-    begin
-      select js_update('create', new.id);
-    end;`);
-
   db.run(`
     insert into tasks values (1, 0, 'hello');
     insert into tags values (1, 'inbox');
