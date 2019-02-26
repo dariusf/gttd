@@ -104,6 +104,8 @@ function on_init() {
 function render() {
 
   elementOpen('div');
+
+  // add task
   elementVoid('input', null, ['placeholder', 'add task', 'onkeypress', e => {
     if (e.keyCode === 13) {
       var text = e.target.value;
@@ -118,6 +120,7 @@ function render() {
     }
   }]);
 
+  // change project
   elementOpen('select', null, ['onchange', e => {
     let id = e.target.options[e.target.selectedIndex].getAttribute('project_id')
     window.state.chosenProject = { name: e.target.value, id: id };
@@ -133,12 +136,14 @@ function render() {
   });
   elementClose('select');
 
+  // dirty
   if (window.state.dirty) {
     elementOpen('span');
     text('*')
     elementClose('span');
   }
 
+  // more/less
   elementOpen('div');
   elementOpen('a', null, ['href', '#', 'onclick', _ => {
     window.state.more = !window.state.more;
@@ -150,6 +155,7 @@ function render() {
 
   if (window.state.more) {
     elementOpen('div');
+    // export
     elementOpen('a', null, ['href', '#', 'onclick', e => {
       var result = [];
       result.push('tasks')
@@ -170,6 +176,7 @@ function render() {
     elementClose('a');
     elementClose('div');
 
+    // clear done
     elementOpen('div');
     elementOpen('a', null, ['href', '#', 'onclick', _ => {
       query('delete from tasks where id in (select t.id from tasks t inner join projects p on p.id = t.project_id where t.done and p.id = ?);',
@@ -181,6 +188,7 @@ function render() {
     elementClose('a');
     elementClose('div');
 
+    // token
     elementOpen('div');
     elementVoid('input', null, ['placeholder', 'dropbox token', 'onkeypress', e => {
       if (e.keyCode === 13) {
@@ -192,6 +200,8 @@ function render() {
       }
     }], 'value', window.localStorage.gttdDropboxToken || '');
     elementClose('div');
+
+    // save
     elementOpen('div');
     elementOpen('a', null, ['href', '#', 'onclick', e => {
 
@@ -215,6 +225,8 @@ function render() {
     text('save')
     elementClose('a');
     elementClose('div');
+
+    // load
     elementOpen('div');
     elementOpen('a', null, ['href', '#', 'onclick', e => {
 
@@ -244,6 +256,19 @@ function render() {
     }]);
     text('load')
     elementClose('a');
+    elementClose('div');
+
+    // add project
+    elementOpen('div');
+    elementVoid('input', null, ['placeholder', 'add project', 'onkeypress', e => {
+      if (e.keyCode === 13) {
+        var text = e.target.value;
+        query('insert into projects select null, ?, (select 1+max(ordinal) from projects);', [text]);
+        e.target.value = '';
+        window.state.dirty = true;
+        update();
+      }
+    }]);
     elementClose('div');
   }
 
@@ -301,27 +326,30 @@ function render() {
     elementOpen('a', `task-more-${id}`, ['href', '#', 'onclick', e => {
       e.target.insertAdjacentElement("beforeBegin", document.createElement('br'));
 
-      var tagsField = document.createElement('input');
-      tagsField.setAttribute("placeholder", "tags");
-      var tags = query('select name from tags where task_id = ?', [id]);
-      if (tags.length) {
-        tagsField.value = tags[0].values.join(',');
-      }
-      tagsField.onkeypress = e => {
-        if (e.keyCode === 13) {
-          var text = e.target.value;
-          text.split(',').forEach(t => {
-              query('delete from tags where task_id = ?', [id]);
-              query('insert into tags values (?, ?)', [id, t.trim()]);
-          });
-          window.state.dirty = true;
-          update();
-        }
+      // projects
+      var projectsSelect = document.createElement('select');
+      projectsSelect.onchange = e => {
+        let project_id = e.target.options[e.target.selectedIndex].getAttribute('project_id')
+        query('update tasks set project_id = ? where id = ?', [project_id, id]);
+        window.state.dirty = true;
+        update();
       };
-      e.target.insertAdjacentElement("beforeBegin", tagsField);
+      projects.forEach(t => {
+        let [id, name] = t;
+        let opt = document.createElement('option');
+        opt.setAttribute('value', name);
+        opt.setAttribute('project_id', id);
+        if (id === project_id) {
+          opt.setAttribute('selected', true);
+        }
+        opt.innerHTML = name;
+        projectsSelect.appendChild(opt);
+      });
+      e.target.insertAdjacentElement("beforeBegin", projectsSelect);
 
       e.target.insertAdjacentElement("beforeBegin", document.createElement('br'));
 
+      // blocked by
       var blockedBy = document.createElement('a');
       blockedBy.innerHTML = 'blocked by';
       blockedBy.setAttribute('href', '#');
@@ -346,6 +374,7 @@ function render() {
       e.target.insertAdjacentElement("beforeBegin", byThis);
       e.target.insertAdjacentElement("beforeBegin", document.createElement('br'));
 
+      // top and bottom
       var toTop = document.createElement('a');
       toTop.setAttribute('href', '#');
       toTop.innerHTML = 'top';
@@ -368,6 +397,28 @@ function render() {
         update();
       };
       e.target.insertAdjacentElement("beforeBegin", toBottom);
+
+      e.target.insertAdjacentElement("beforeBegin", document.createElement('br'));
+
+      // tags
+      var tagsField = document.createElement('input');
+      tagsField.setAttribute("placeholder", "tags");
+      var tags = query('select name from tags where task_id = ?', [id]);
+      if (tags.length) {
+        tagsField.value = tags[0].values.join(',');
+      }
+      tagsField.onkeypress = e => {
+        if (e.keyCode === 13) {
+          var text = e.target.value;
+          text.split(',').forEach(t => {
+              query('delete from tags where task_id = ?', [id]);
+              query('insert into tags values (?, ?)', [id, t.trim()]);
+          });
+          window.state.dirty = true;
+          update();
+        }
+      };
+      e.target.insertAdjacentElement("beforeBegin", tagsField);
 
       e.target.remove();
     }]);
