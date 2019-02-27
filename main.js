@@ -79,6 +79,21 @@ function query(query, values) {
 
 var { patch, elementVoid, elementClose, elementOpen, text } = IncrementalDOM;
 
+// debounce
+
+var debounce = (function () {
+  let timer = 0;
+  return (f) => {
+    timer++;
+    setTimeout(() => {
+      timer--;
+      if (timer === 0) {
+        f();
+      }
+    }, 6000);
+  };
+})();
+
 var database = todo();
 
 // derived/transient state which is okay to forget
@@ -87,7 +102,26 @@ var state = {
   chosenProject: { name: 'inbox', id: 1 },
   blockee: null,
   dirty: false,
+  autosave: false,
 };
+
+function save() {
+  var token = window.localStorage.gttdDropboxToken;
+  if (!token) {
+    return;
+  }
+
+  new Dropbox.Dropbox({ accessToken: token, fetch: fetch })
+    .filesUpload({contents: database.export().buffer, path: '/todo.db', mode: {'.tag': 'overwrite'}})
+    .then(function() {
+      console.log('saved');
+      window.state.dirty = false;
+      update();
+    })
+    .catch(function (error) {
+      console.log(error);
+    });
+}
 
 // idempotent, pre-update initialization. occurs after a database is loaded,
 // so should restore the starting state
@@ -99,6 +133,13 @@ function on_init() {
 
   state.blockee = null;
   state.dirty = false;
+}
+
+function dirty() {
+  window.state.dirty = true;
+  if (window.state.autosave) {
+    debounce(save);
+  }
 }
 
 function render() {
@@ -115,7 +156,7 @@ function render() {
       query('insert into tasks values (null, 0, ?, ?, 0);',
         [text, window.state.chosenProject.id]);
       e.target.value = '';
-      window.state.dirty = true;
+      dirty();
       update();
     }
   }]);
@@ -181,7 +222,7 @@ function render() {
     elementOpen('a', null, ['href', '#', 'onclick', _ => {
       query('delete from tasks where id in (select t.id from tasks t inner join projects p on p.id = t.project_id where t.done and p.id = ?);',
         [window.state.chosenProject.id]);
-      window.state.dirty = true;
+      dirty();
       update();
     }]);
     text('clear done')
@@ -201,27 +242,16 @@ function render() {
     }], 'value', window.localStorage.gttdDropboxToken || '');
     elementClose('div');
 
+    // autosave
+    elementOpen('div');
+    elementVoid.apply(null, ['input', null, ['type', 'checkbox', 'onchange', e => {window.state.autosave = !window.state.autosave;}]]
+      .concat(window.state.autosave ? ['checked', 'lol'] : []))
+    text('autosave')
+    elementClose('div');
+
     // save
     elementOpen('div');
-    elementOpen('a', null, ['href', '#', 'onclick', e => {
-
-      var token = window.localStorage.gttdDropboxToken;
-      if (!token) {
-        return;
-      }
-
-      new Dropbox.Dropbox({ accessToken: token, fetch: fetch })
-        .filesUpload({contents: database.export().buffer, path: '/todo.db', mode: {'.tag': 'overwrite'}})
-        .then(function() {
-          console.log('saved');
-          window.state.dirty = false;
-          update();
-        })
-        .catch(function (error) {
-          console.log(error);
-        });
-
-    }]);
+    elementOpen('a', null, ['href', '#', 'onclick', save]);
     text('save')
     elementClose('a');
     elementClose('div');
@@ -265,7 +295,7 @@ function render() {
         var text = e.target.value;
         query('insert into projects select null, ?, (select 1+max(ordinal) from projects);', [text]);
         e.target.value = '';
-        window.state.dirty = true;
+        dirty();
         update();
       }
     }]);
@@ -313,7 +343,7 @@ function render() {
 
     function on_change(id, checked) {
       query(`update tasks set done = ? where id = ?`, [+checked, id]);
-      window.state.dirty = true;
+      dirty();
       update();
     }
 
@@ -331,7 +361,7 @@ function render() {
       projectsSelect.onchange = e => {
         let project_id = e.target.options[e.target.selectedIndex].getAttribute('project_id')
         query('update tasks set project_id = ? where id = ?', [project_id, id]);
-        window.state.dirty = true;
+        dirty();
         update();
       };
       projects.forEach(t => {
@@ -367,7 +397,7 @@ function render() {
           query('insert into task_deps values (?, ?)',
             [window.state.blockee, id]);
           window.state.blockee = null;
-          window.state.dirty = true;
+          dirty();
           update();
         }
       };
@@ -381,7 +411,7 @@ function render() {
       toTop.onclick = e => {
         query('update tasks set ordinal = ordinal + 1 where project_id = ? and id <> ?;', [window.state.chosenProject.id, id]);
         query('update tasks set ordinal = 0 where id = ?;', [id]);
-        window.state.dirty = true;
+        dirty();
         update();
       };
       e.target.insertAdjacentElement("beforeBegin", toTop);
@@ -393,7 +423,7 @@ function render() {
       toBottom.onclick = e => {
         query('update tasks set ordinal = 1+(select max(ordinal) from tasks where project_id = ?) where id = ?;',
           [window.state.chosenProject.id, id]);
-        window.state.dirty = true;
+        dirty();
         update();
       };
       e.target.insertAdjacentElement("beforeBegin", toBottom);
@@ -414,7 +444,7 @@ function render() {
               query('delete from tags where task_id = ?', [id]);
               query('insert into tags values (?, ?)', [id, t.trim()]);
           });
-          window.state.dirty = true;
+          dirty();
           update();
         }
       };
