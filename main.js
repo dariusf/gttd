@@ -123,6 +123,30 @@ function save() {
     });
 }
 
+function reorder_project() {
+  let project_id = window.state.chosenProject.id;
+  database.run(`
+  create temp table helper (id integer, ordinal integer primary key);
+  insert into helper select id, null from tasks where project_id = ${project_id} order by ordinal;
+  update tasks set ordinal = (select ordinal from helper where helper.id = tasks.id) where project_id = ${project_id};
+  drop table helper;
+  `);
+}
+
+function add_task(text) {
+  // the null uses the existing sequence, however the create event loses its id
+  query('update tasks set ordinal = ordinal + 1 where project_id = ?;',
+    [window.state.chosenProject.id]);
+  query('insert into tasks values (null, 0, ?, ?, 0);',
+    [text, window.state.chosenProject.id]);
+}
+
+function add_task_bottom(text) {
+  // TODO the max returns null if there are no tasks
+  query('insert into tasks select null, 0, ?, ?, (select 1+max(ordinal) from tasks where project_id = ?);',
+    [text, window.state.chosenProject.id, window.state.chosenProject.id]);
+}
+
 // idempotent, pre-update initialization. occurs after a database is loaded,
 // so should restore the starting state
 function on_init() {
@@ -150,11 +174,7 @@ function render() {
   elementVoid('input', null, ['placeholder', 'add task', 'onkeypress', e => {
     if (e.keyCode === 13) {
       var text = e.target.value;
-      // the null uses the existing sequence, however the create event loses its id
-      query('update tasks set ordinal = ordinal + 1 where project_id = ?;',
-        [window.state.chosenProject.id]);
-      query('insert into tasks values (null, 0, ?, ?, 0);',
-        [text, window.state.chosenProject.id]);
+      add_task(text);
       e.target.value = '';
       dirty();
       update();
