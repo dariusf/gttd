@@ -351,7 +351,8 @@ function render() {
     elementVoid.apply(null,
       ['input', `task-checkbox-${id}`, ['type', 'checkbox', 'onchange', e => on_change(id, e.target.checked)]]
         .concat(checked ? ['checked', 'lol'] : []))
-    text(desc);
+    text(ordinal + ' ' + desc);
+    // text(desc);
 
     elementOpen('a', `task-more-${id}`, ['href', '#', 'onclick', e => {
       e.target.insertAdjacentElement("beforeBegin", document.createElement('br'));
