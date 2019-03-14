@@ -13,7 +13,7 @@
 
   // traverses a dependency map to collect all transitive dependencies
   function all_transitive(map, a) {
-    let neighbours = Object.keys(map[a] || {});
+    let neighbours = Object.keys(map[a] || {}).filter(k => map[a][k]);
     if (neighbours.length === 0) {
       return [];
     } else {
