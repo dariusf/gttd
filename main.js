@@ -339,6 +339,7 @@ function render() {
 
   tasks = results(tasks);
   deps = results(deps);
+  blocked = new Set(deps.map(d => d[0]));
 
   function reorder_tasks() {
     let done = tasks.filter(t => t[1]);
@@ -368,11 +369,15 @@ function render() {
     }
 
     // work around https://github.com/google/incremental-dom/issues/198
+    // because the dynamic properties are passed via varargs /facepalm
     elementVoid.apply(null,
       ['input', `task-checkbox-${id}`, ['type', 'checkbox', 'onchange', e => on_change(id, e.target.checked)]]
         .concat(checked ? ['checked', 'lol'] : []))
-    text(ordinal + ' ' + desc);
-    // text(desc);
+    text(ordinal + ' ');
+    elementOpen.apply(null, ['span', `task-text-${id}`, null].concat(
+      blocked.has(id) ? ['style', 'color: rgb(200, 200, 200);'] : []));
+    text(desc);
+    elementClose('span');
 
     elementOpen('a', `task-more-${id}`, ['href', '#', 'onclick', e => {
       e.target.insertAdjacentElement("beforeBegin", document.createElement('br'));
