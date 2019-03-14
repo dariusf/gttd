@@ -333,9 +333,11 @@ function render() {
   // assume that dependencies don't span projects
   var deps = query(`
     select distinct td.*
-    from task_deps td, tasks t
-    where t.project_id = ?
-    and td.t_from = t.id or td.t_to = t.id;`, [window.state.chosenProject.id]);
+    from task_deps td, tasks tf, tasks tt
+    where tf.project_id = ?
+    and tt.project_id = tf.project_id
+    and not tt.done
+    and td.t_from = tf.id and td.t_to = tt.id;`, [window.state.chosenProject.id]);
 
   tasks = results(tasks);
   deps = results(deps);
